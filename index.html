@@ -64,18 +64,6 @@
       text-align: center;
       margin-top: 20px;
     }
-    .dashboard {
-      display: flex;
-      justify-content: space-between;
-      margin-top: 30px;
-    }
-    .dashboard div {
-      padding: 10px;
-      background-color: #e3e3e3;
-      border-radius: 5px;
-      width: 30%;
-      text-align: center;
-    }
   </style>
 </head>
 <body>
@@ -116,76 +104,29 @@
       <tbody id="donation-list"></tbody>
     </table>
 
-    <!-- Dashboard -->
-    <div class="dashboard">
-      <div id="capacity-info">
-        <h3>Today's Capacity Info</h3>
-        <p id="total-donated">Total Donated: 0</p>
-        <p id="remaining-capacity">Remaining Capacity: 1000</p>
-      </div>
-      <div id="date-summary">
-        <h3>Summary of Donations</h3>
-        <p id="donated-summary">No donations yet</p>
-      </div>
-    </div>
+    <div id="alert-container"></div>
   </div>
 
-  <!-- Firebase Scripts -->
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
-
   <script>
-    // Firebase configuration
-    const firebaseConfig = {
-      apiKey: "AIzaSyChHUYTqCCmCHJOCd73tim5gV9PCqTyQ2o",
-      authDomain: "food-donation-tracker-4084e.firebaseapp.com",
-      projectId: "food-donation-tracker-4084e",
-      storageBucket: "food-donation-tracker-4084e.firebasestorage.app",
-      messagingSenderId: "789282705882",
-      appId: "1:789282705882:web:b3fdd8303fc6ef5a9730e3"
-    };
+    const donations = [
+      { date: '2025-04-24', location: 'Pusat Transit Gelandangan Jalan Pahang', quantity: 200 },
+      { date: '2025-04-24', location: 'Pusat Khidmat Gelandangan Medan Tuanku', quantity: 150 },
+      { date: '2025-04-24', location: 'Pusat Pembelajaran Komuniti Jalan Chow Kit', quantity: 100 },
+    ];
 
-    // Initialize Firebase
-    const app = firebase.initializeApp(firebaseConfig);
-    const database = firebase.database(app);
-
-    const maxCapacity = 1000;
-
-    // Function to load donations from Firebase
+    // Function to load donations and display them in the table
     function loadDonations() {
-      const today = new Date().toISOString().split('T')[0];
+      const donationList = document.getElementById('donation-list');
+      donationList.innerHTML = '';
 
-      // Retrieve donations for the current day
-      const donationsRef = database.ref('donations').child(today);
-      donationsRef.once('value', snapshot => {
-        const donations = snapshot.val() || [];
-        let totalDonated = 0;
-        donations.forEach(d => totalDonated += d.quantity);
-
-        const remainingCapacity = maxCapacity - totalDonated;
-
-        // Update the dashboard
-        document.getElementById('total-donated').innerText = `Total Donated: ${totalDonated}`;
-        document.getElementById('remaining-capacity').innerText = `Remaining Capacity: ${remainingCapacity}`;
-
-        // Update donation summary
-        const summary = donations.length > 0
-          ? `Total donations: ${donations.length} | Total Quantity: ${totalDonated}`
-          : 'No donations yet';
-        document.getElementById('donated-summary').innerText = summary;
-
-        // Update the donation table
-        const donationList = document.getElementById('donation-list');
-        donationList.innerHTML = '';
-        donations.forEach(donation => {
-          const row = document.createElement('tr');
-          row.innerHTML = `
-            <td>${donation.date}</td>
-            <td>${donation.location}</td>
-            <td>${donation.quantity}</td>
-          `;
-          donationList.appendChild(row);
-        });
+      donations.forEach(donation => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${donation.date}</td>
+          <td>${donation.location}</td>
+          <td>${donation.quantity}</td>
+        `;
+        donationList.appendChild(row);
       });
     }
 
@@ -196,31 +137,38 @@
       const date = document.getElementById('date').value;
 
       if (!date || !quantity || quantity <= 0) {
-        alert('Please fill out all fields with valid information');
+        showAlert('Please fill out all fields with valid information', 'error');
         return;
       }
 
-      // Get the donations for today
-      const today = new Date().toISOString().split('T')[0];
-      const donationsRef = database.ref('donations').child(today);
+      // Check if the location is at full capacity (1000) and cannot accept more donations
+      const totalQuantityToday = donations
+        .filter(donation => donation.date === date && donation.location === location)
+        .reduce((sum, d) => sum + d.quantity, 0);
 
-      donationsRef.once('value', snapshot => {
-        const donations = snapshot.val() || [];
-        const totalDonatedToday = donations.reduce((sum, d) => sum + d.quantity, 0);
+      const maxCapacity = 1000;
+      if (totalQuantityToday + quantity > maxCapacity) {
+        showAlert('This location has reached its maximum capacity for today!', 'error');
+        return;
+      }
 
-        // Check if the donation exceeds the max capacity
-        if (totalDonatedToday + quantity > maxCapacity) {
-          alert('Cannot exceed the maximum donation capacity for today!');
-          return;
-        }
-
-        // Add the new donation
-        donationsRef.push({ location, quantity, date });
-        loadDonations();
-      });
+      donations.push({ location, quantity, date });
+      loadDonations();
+      showAlert('Donation added successfully!', 'success');
     }
 
-    // Load donations when the page is loaded
+    // Function to show an alert message
+    function showAlert(message, type) {
+      const alertContainer = document.getElementById('alert-container');
+      const alertBox = document.createElement('div');
+      alertBox.classList.add('alert');
+      alertBox.classList.add(type === 'error' ? 'alert-error' : 'alert-success');
+      alertBox.textContent = message;
+      alertContainer.innerHTML = ''; // Clear previous alert
+      alertContainer.appendChild(alertBox);
+    }
+
+    // Load donations when the page loads
     window.onload = loadDonations;
   </script>
 </body>
