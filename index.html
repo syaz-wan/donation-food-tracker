@@ -1,317 +1,199 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Food Donation Tracker</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 900px;
+      margin: 30px auto;
+      padding: 20px;
+      background-color: white;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      font-weight: bold;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      font-size: 16px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    table {
+      width: 100%;
+      margin-top: 20px;
+      border-collapse: collapse;
+    }
+    table, th, td {
+      border: 1px solid #ddd;
+    }
+    th, td {
+      padding: 10px;
+      text-align: center;
+    }
+    .alert {
+      background-color: #f44336;
+      color: white;
+      padding: 10px;
+      text-align: center;
+      margin-top: 20px;
+    }
+    .dashboard {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 30px;
+    }
+    .dashboard div {
+      padding: 10px;
+      background-color: #e3e3e3;
+      border-radius: 5px;
+      width: 30%;
+      text-align: center;
+    }
+  </style>
 </head>
-<body class="bg-gray-100 p-6">
-  <div class="max-w-6xl mx-auto bg-white p-6 rounded-xl shadow-md">
-    <h1 class="text-2xl font-bold mb-4 text-center">Food Donation Tracker</h1>
+<body>
+  <div class="container">
+    <h1>Food Donation Tracker</h1>
 
-    <!-- Dashboard -->
-    <div id="dashboard" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <div class="bg-blue-100 p-4 rounded shadow">
-        <p class="text-lg font-semibold">Total Donations</p>
-        <p id="totalDonations" class="text-2xl font-bold">0</p>
+    <!-- Form for Donation Entry -->
+    <div class="form-group">
+      <label for="location">Location:</label>
+      <select id="location" required>
+        <option value="Pusat Transit Gelandangan Jalan Pahang">Pusat Transit Gelandangan Jalan Pahang</option>
+        <option value="Pusat Khidmat Gelandangan Medan Tuanku">Pusat Khidmat Gelandangan Medan Tuanku</option>
+        <option value="Pusat Pembelajaran Komuniti Jalan Chow Kit">Pusat Pembelajaran Komuniti Jalan Chow Kit</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="quantity">Quantity:</label>
+      <input type="number" id="quantity" required>
+    </div>
+
+    <div class="form-group">
+      <label for="date">Date:</label>
+      <input type="date" id="date" required>
+    </div>
+
+    <button onclick="addDonation()">Add Donation</button>
+
+    <!-- Donation List -->
+    <table id="donation-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Location</th>
+          <th>Quantity</th>
+        </tr>
+      </thead>
+      <tbody id="donation-list"></tbody>
+    </table>
+
+    <!-- Donation Dashboard -->
+    <div class="dashboard">
+      <div id="capacity-info">
+        <h3>Today's Capacity Info</h3>
+        <p id="total-donated">Total Donated: 0</p>
+        <p id="remaining-capacity">Remaining Capacity: 1000</p>
       </div>
-      <div class="bg-green-100 p-4 rounded shadow">
-        <p class="text-lg font-semibold">Total Quantity</p>
-        <p id="totalQuantity" class="text-2xl font-bold">0</p>
-      </div>
-      <div class="bg-yellow-100 p-4 rounded shadow">
-        <p class="text-lg font-semibold">By Location</p>
-        <ul id="locationStats" class="list-disc ml-5 text-sm"></ul>
+      <div id="date-summary">
+        <h3>Summary of Donations</h3>
+        <p id="donated-summary">No donations yet</p>
       </div>
     </div>
 
-    <!-- Form + Filter -->
-    <div class="mb-6 flex flex-col md:flex-row gap-6">
-      <form id="donationForm" class="space-y-4 w-full md:w-2/3">
-        <input type="hidden" id="editIndex" value="">
-        <div>
-          <label class="block font-semibold">Donor Name</label>
-          <input type="text" id="donor" required class="w-full p-2 border rounded">
-        </div>
-        <div>
-          <label class="block font-semibold">Food Item</label>
-          <input type="text" id="food" required class="w-full p-2 border rounded">
-        </div>
-        <div>
-          <label class="block font-semibold">Quantity</label>
-          <input type="number" id="quantity" required class="w-full p-2 border rounded">
-        </div>
-        <div>
-          <label class="block font-semibold">Date</label>
-          <input type="date" id="date" required class="w-full p-2 border rounded">
-        </div>
-        <div>
-          <label class="block font-semibold">Location</label>
-          <select id="location" required class="w-full p-2 border rounded"></select>
-        </div>
-        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-          Save Donation
-        </button>
-      </form>
-
-      <!-- Filter -->
-      <div class="w-full md:w-1/3">
-        <label class="block font-semibold mb-1">Filter by Location</label>
-        <select id="filterLocation" class="w-full p-2 border rounded"></select>
-      </div>
-    </div>
-
-    <!-- Table -->
-    <div class="overflow-x-auto">
-      <table class="w-full text-left border">
-        <thead class="bg-gray-200">
-          <tr>
-            <th class="p-2 border">Donor</th>
-            <th class="p-2 border">Food Item</th>
-            <th class="p-2 border">Quantity</th>
-            <th class="p-2 border">Date</th>
-            <th class="p-2 border">Location</th>
-            <th class="p-2 border">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="donationList" class="bg-white">
-          <!-- Donation rows -->
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Chart -->
-    <canvas id="locationChart" class="my-6 w-full max-w-lg mx-auto"></canvas>
   </div>
 
   <script>
-    const LOCATION_CAPACITY = 1000;
-    const LOCATIONS = [
-      "Pusat Transit Gelandangan Jalan Pahang",
-      "Pusat Khidmat Gelandangan Medan Tuanku",
-      "Pusat Pembelajaran Komuniti Jalan Chow Kit"
-    ];
-
-    const form = document.getElementById('donationForm');
-    const donationList = document.getElementById('donationList');
-    const filterLocation = document.getElementById('filterLocation');
-    const locationSelect = document.getElementById('location');
-    const editIndexInput = document.getElementById('editIndex');
-    const locationChart = document.getElementById('locationChart');
-
+    const maxCapacity = 1000;
     let donations = JSON.parse(localStorage.getItem('donations')) || [];
-    let lastResetDate = localStorage.getItem('lastResetDate');
 
-    function resetDonationsIfNewDay() {
-      const today = new Date().toISOString().split('T')[0]; // Get current date (YYYY-MM-DD)
+    function loadDonations() {
+      const today = new Date().toISOString().split('T')[0];
+      const filteredDonations = donations.filter(d => d.date === today);
+      let totalDonated = 0;
+      filteredDonations.forEach(d => totalDonated += d.quantity);
+      const remainingCapacity = maxCapacity - totalDonated;
 
-      if (lastResetDate !== today) {
-        donations = [];
-        localStorage.setItem('donations', JSON.stringify(donations));
-        localStorage.setItem('lastResetDate', today);
-        return true;
-      }
-      return false;
-    }
+      // Update the dashboard
+      document.getElementById('total-donated').innerText = `Total Donated: ${totalDonated}`;
+      document.getElementById('remaining-capacity').innerText = `Remaining Capacity: ${remainingCapacity}`;
+      
+      // Update donation summary
+      const summary = filteredDonations.length > 0
+        ? `Total donations: ${filteredDonations.length} | Total Quantity: ${totalDonated}`
+        : 'No donations yet';
+      document.getElementById('donated-summary').innerText = summary;
 
-    function saveDonations() {
-      localStorage.setItem('donations', JSON.stringify(donations));
-    }
-
-    function getLocationStats() {
-      const stats = {};
-      LOCATIONS.forEach(loc => stats[loc] = 0);
-      donations.forEach(d => {
-        if (stats[d.location] !== undefined) {
-          stats[d.location] += parseInt(d.quantity);
-        }
-      });
-      return stats;
-    }
-
-    function updateLocationDropdowns() {
-      const stats = getLocationStats();
-      locationSelect.innerHTML = '<option value="" disabled selected>Select a location</option>';
-      filterLocation.innerHTML = '<option value="All">All</option>';
-      LOCATIONS.forEach(loc => {
-        const isFull = stats[loc] >= LOCATION_CAPACITY;
-        const opt1 = new Option(`${loc}${isFull ? ' (Full)' : ''}`, loc);
-        const opt2 = new Option(loc, loc);
-        if (isFull) opt1.disabled = true;
-        locationSelect.add(opt1);
-        filterLocation.add(opt2);
-      });
-    }
-
-    function renderDashboard() {
-      const totalDonations = donations.length;
-      const totalQuantity = donations.reduce((sum, d) => sum + parseInt(d.quantity), 0);
-      const locStats = getLocationStats();
-      document.getElementById('totalDonations').textContent = totalDonations;
-      document.getElementById('totalQuantity').textContent = totalQuantity;
-
-      const statsList = document.getElementById('locationStats');
-      statsList.innerHTML = '';
-      for (const [loc, qty] of Object.entries(locStats)) {
-        const li = document.createElement('li');
-        li.textContent = `${loc}: ${qty} / ${LOCATION_CAPACITY}`;
-        statsList.appendChild(li);
-      }
-
-      drawChart();
-    }
-
-    function renderDonations() {
+      // Display donation entries in the table
+      const donationList = document.getElementById('donation-list');
       donationList.innerHTML = '';
-      const selectedLocation = filterLocation.value;
-      const filtered = selectedLocation === 'All' || !selectedLocation
-        ? donations
-        : donations.filter(d => d.location === selectedLocation);
-
-      filtered.forEach((d, i) => {
+      donations.forEach(donation => {
         const row = document.createElement('tr');
         row.innerHTML = `
-          <td class="p-2 border">${d.donor}</td>
-          <td class="p-2 border">${d.food}</td>
-          <td class="p-2 border">${d.quantity}</td>
-          <td class="p-2 border">${d.date}</td>
-          <td class="p-2 border">${d.location}</td>
-          <td class="p-2 border space-x-2">
-            <button onclick="editDonation(${i})" class="bg-yellow-500 text-white px-2 py-1 rounded">Edit</button>
-            <button onclick="deleteDonation(${i})" class="bg-red-600 text-white px-2 py-1 rounded">Delete</button>
-          </td>
+          <td>${donation.date}</td>
+          <td>${donation.location}</td>
+          <td>${donation.quantity}</td>
         `;
         donationList.appendChild(row);
       });
-
-      renderDashboard();
-      updateLocationDropdowns();
     }
 
-    function editDonation(index) {
-      const d = donations[index];
-      document.getElementById('donor').value = d.donor;
-      document.getElementById('food').value = d.food;
-      document.getElementById('quantity').value = d.quantity;
-      document.getElementById('date').value = d.date;
-      document.getElementById('location').value = d.location;
-      editIndexInput.value = index;
-    }
-
-    function deleteDonation(index) {
-      Swal.fire({
-        title: 'Are you sure?',
-        text: 'This donation will be deleted!',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Yes, delete it!',
-        cancelButtonText: 'No, keep it'
-      }).then((result) => {
-        if (result.isConfirmed) {
-          donations.splice(index, 1);
-          saveDonations();
-          renderDonations();
-          Swal.fire('Deleted!', 'The donation has been deleted.', 'success');
-        }
-      });
-    }
-
-    function drawChart() {
-      const stats = getLocationStats();
-      const labels = Object.keys(stats);
-      const data = Object.values(stats);
-
-      const ctx = locationChart.getContext('2d');
-      new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels,
-          datasets: [{
-            label: 'Quantity Donated',
-            data,
-            backgroundColor: 'rgba(54, 162, 235, 0.7)',
-          }]
-        },
-        options: {
-          responsive: true,
-          scales: {
-            y: {
-              beginAtZero: true,
-              max: LOCATION_CAPACITY
-            }
-          }
-        }
-      });
-    }
-
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
+    function addDonation() {
       const location = document.getElementById('location').value;
       const quantity = parseInt(document.getElementById('quantity').value);
-      const locStats = getLocationStats();
+      const date = document.getElementById('date').value;
 
-      const editIndex = editIndexInput.value;
-      let currentQty = 0;
-
-      if (editIndex !== '') {
-        const existing = donations[editIndex];
-        if (existing.location === location) {
-          currentQty = parseInt(existing.quantity);
-        }
-      }
-
-      if ((locStats[location] - currentQty + quantity) > LOCATION_CAPACITY) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Full Capacity!',
-          text: 'This location cannot accept more donations.'
-        });
+      if (!date || !quantity || quantity <= 0) {
+        alert('Please fill out all fields with valid information');
         return;
       }
 
-      const newDonation = {
-        donor: document.getElementById('donor').value,
-        food: document.getElementById('food').value,
-        quantity,
-        date: document.getElementById('date').value,
-        location
-      };
-
-      if (editIndex !== '') {
-        donations[editIndex] = newDonation;
-        editIndexInput.value = '';
-      } else {
-        donations.push(newDonation);
+      // Check if the donation is within the allowed capacity for today
+      const today = new Date().toISOString().split('T')[0];
+      const totalDonatedToday = donations.filter(d => d.date === today).reduce((sum, d) => sum + d.quantity, 0);
+      if (totalDonatedToday + quantity > maxCapacity) {
+        alert('Cannot exceed the maximum donation capacity for today!');
+        return;
       }
 
-      saveDonations();
-      renderDonations();
-      form.reset();
+      // Add donation to the list
+      const newDonation = { location, quantity, date };
+      donations.push(newDonation);
+      localStorage.setItem('donations', JSON.stringify(donations));
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Donation Saved!',
-        timer: 1500,
-        showConfirmButton: false
-      });
-    });
-
-    filterLocation.addEventListener('change', renderDonations);
-
-    // On initial load, check if a new day has started and reset donations if necessary
-    if (resetDonationsIfNewDay()) {
-      Swal.fire({
-        icon: 'info',
-        title: 'New Day, New Donations!',
-        text: 'The donation tracker has been reset for the day.',
-        timer: 1500,
-        showConfirmButton: false
-      });
+      loadDonations();
     }
 
-    renderDonations();
+    // Load donations when the page is loaded
+    window.onload = loadDonations;
   </script>
 </body>
 </html>
