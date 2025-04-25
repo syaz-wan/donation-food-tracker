@@ -82,7 +82,7 @@
   <div class="container">
     <h1>Food Donation Tracker</h1>
 
-    <!-- Form for Donation Entry -->
+    <!-- Donation Form -->
     <div class="form-group">
       <label for="location">Location:</label>
       <select id="location" required>
@@ -116,7 +116,7 @@
       <tbody id="donation-list"></tbody>
     </table>
 
-    <!-- Donation Dashboard -->
+    <!-- Dashboard -->
     <div class="dashboard">
       <div id="capacity-info">
         <h3>Today's Capacity Info</h3>
@@ -128,44 +128,68 @@
         <p id="donated-summary">No donations yet</p>
       </div>
     </div>
-
   </div>
 
-  <script>
-    const maxCapacity = 1000;
-    let donations = JSON.parse(localStorage.getItem('donations')) || [];
+  <!-- Firebase Scripts -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
 
+  <script>
+    // Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyChHUYTqCCmCHJOCd73tim5gV9PCqTyQ2o",
+      authDomain: "food-donation-tracker-4084e.firebaseapp.com",
+      projectId: "food-donation-tracker-4084e",
+      storageBucket: "food-donation-tracker-4084e.firebasestorage.app",
+      messagingSenderId: "789282705882",
+      appId: "1:789282705882:web:b3fdd8303fc6ef5a9730e3"
+    };
+
+    // Initialize Firebase
+    const app = firebase.initializeApp(firebaseConfig);
+    const database = firebase.database(app);
+
+    const maxCapacity = 1000;
+
+    // Function to load donations from Firebase
     function loadDonations() {
       const today = new Date().toISOString().split('T')[0];
-      const filteredDonations = donations.filter(d => d.date === today);
-      let totalDonated = 0;
-      filteredDonations.forEach(d => totalDonated += d.quantity);
-      const remainingCapacity = maxCapacity - totalDonated;
 
-      // Update the dashboard
-      document.getElementById('total-donated').innerText = `Total Donated: ${totalDonated}`;
-      document.getElementById('remaining-capacity').innerText = `Remaining Capacity: ${remainingCapacity}`;
-      
-      // Update donation summary
-      const summary = filteredDonations.length > 0
-        ? `Total donations: ${filteredDonations.length} | Total Quantity: ${totalDonated}`
-        : 'No donations yet';
-      document.getElementById('donated-summary').innerText = summary;
+      // Retrieve donations for the current day
+      const donationsRef = database.ref('donations').child(today);
+      donationsRef.once('value', snapshot => {
+        const donations = snapshot.val() || [];
+        let totalDonated = 0;
+        donations.forEach(d => totalDonated += d.quantity);
 
-      // Display donation entries in the table
-      const donationList = document.getElementById('donation-list');
-      donationList.innerHTML = '';
-      donations.forEach(donation => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${donation.date}</td>
-          <td>${donation.location}</td>
-          <td>${donation.quantity}</td>
-        `;
-        donationList.appendChild(row);
+        const remainingCapacity = maxCapacity - totalDonated;
+
+        // Update the dashboard
+        document.getElementById('total-donated').innerText = `Total Donated: ${totalDonated}`;
+        document.getElementById('remaining-capacity').innerText = `Remaining Capacity: ${remainingCapacity}`;
+
+        // Update donation summary
+        const summary = donations.length > 0
+          ? `Total donations: ${donations.length} | Total Quantity: ${totalDonated}`
+          : 'No donations yet';
+        document.getElementById('donated-summary').innerText = summary;
+
+        // Update the donation table
+        const donationList = document.getElementById('donation-list');
+        donationList.innerHTML = '';
+        donations.forEach(donation => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${donation.date}</td>
+            <td>${donation.location}</td>
+            <td>${donation.quantity}</td>
+          `;
+          donationList.appendChild(row);
+        });
       });
     }
 
+    // Function to add a donation
     function addDonation() {
       const location = document.getElementById('location').value;
       const quantity = parseInt(document.getElementById('quantity').value);
@@ -176,20 +200,24 @@
         return;
       }
 
-      // Check if the donation is within the allowed capacity for today
+      // Get the donations for today
       const today = new Date().toISOString().split('T')[0];
-      const totalDonatedToday = donations.filter(d => d.date === today).reduce((sum, d) => sum + d.quantity, 0);
-      if (totalDonatedToday + quantity > maxCapacity) {
-        alert('Cannot exceed the maximum donation capacity for today!');
-        return;
-      }
+      const donationsRef = database.ref('donations').child(today);
 
-      // Add donation to the list
-      const newDonation = { location, quantity, date };
-      donations.push(newDonation);
-      localStorage.setItem('donations', JSON.stringify(donations));
+      donationsRef.once('value', snapshot => {
+        const donations = snapshot.val() || [];
+        const totalDonatedToday = donations.reduce((sum, d) => sum + d.quantity, 0);
 
-      loadDonations();
+        // Check if the donation exceeds the max capacity
+        if (totalDonatedToday + quantity > maxCapacity) {
+          alert('Cannot exceed the maximum donation capacity for today!');
+          return;
+        }
+
+        // Add the new donation
+        donationsRef.push({ location, quantity, date });
+        loadDonations();
+      });
     }
 
     // Load donations when the page is loaded
