@@ -123,10 +123,11 @@
     function updateLocationDropdowns() {
       locationSelect.innerHTML = '<option value="" disabled selected>Select a location</option>';
       filterLocation.innerHTML = '<option value="All">All</option>';
+      
       LOCATIONS.forEach(loc => {
         const opt1 = new Option(loc, loc);
-        locationSelect.add(opt1);
-        filterLocation.add(opt1);
+        locationSelect.add(opt1); // Adds to the donation form location dropdown
+        filterLocation.add(new Option(loc, loc)); // Adds to the filter location dropdown
       });
     }
 
