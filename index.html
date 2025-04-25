@@ -1,17 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Food Donation Tracker</title>
-
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script type="module">
+    // Import the functions you need from the SDKs you need
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getDatabase, ref, set, get, onValue, update } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
+    import { getDatabase, ref, push, onValue, set } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
+    // Firebase configuration
     const firebaseConfig = {
       apiKey: "AIzaSyChHUYTqCCmCHJOCd73tim5gV9PCqTyQ2o",
       authDomain: "food-donation-tracker-4084e.firebaseapp.com",
@@ -22,9 +23,92 @@
       appId: "1:789282705882:web:ed4410ce766855989730e3"
     };
 
+    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
+  </script>
+</head>
 
+<body class="bg-gray-100 p-6">
+  <div class="max-w-6xl mx-auto bg-white p-6 rounded-xl shadow-md">
+    <h1 class="text-2xl font-bold mb-4 text-center">Food Donation Tracker</h1>
+
+    <!-- Dashboard -->
+    <div id="dashboard" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div class="bg-blue-100 p-4 rounded shadow">
+        <p class="text-lg font-semibold">Total Donations</p>
+        <p id="totalDonations" class="text-2xl font-bold">0</p>
+      </div>
+      <div class="bg-green-100 p-4 rounded shadow">
+        <p class="text-lg font-semibold">Total Quantity</p>
+        <p id="totalQuantity" class="text-2xl font-bold">0</p>
+      </div>
+      <div class="bg-yellow-100 p-4 rounded shadow">
+        <p class="text-lg font-semibold">By Location</p>
+        <ul id="locationStats" class="list-disc ml-5 text-sm"></ul>
+      </div>
+    </div>
+
+    <!-- Form + Filter -->
+    <div class="mb-6 flex flex-col md:flex-row gap-6">
+      <form id="donationForm" class="space-y-4 w-full md:w-2/3">
+        <input type="hidden" id="editIndex" value="">
+        <div>
+          <label class="block font-semibold">Donor Name</label>
+          <input type="text" id="donor" required class="w-full p-2 border rounded">
+        </div>
+        <div>
+          <label class="block font-semibold">Food Item</label>
+          <input type="text" id="food" required class="w-full p-2 border rounded">
+        </div>
+        <div>
+          <label class="block font-semibold">Quantity</label>
+          <input type="number" id="quantity" required class="w-full p-2 border rounded">
+        </div>
+        <div>
+          <label class="block font-semibold">Date</label>
+          <input type="date" id="date" required class="w-full p-2 border rounded">
+        </div>
+        <div>
+          <label class="block font-semibold">Location</label>
+          <select id="location" required class="w-full p-2 border rounded"></select>
+        </div>
+        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+          Save Donation
+        </button>
+      </form>
+
+      <!-- Filter -->
+      <div class="w-full md:w-1/3">
+        <label class="block font-semibold mb-1">Filter by Location</label>
+        <select id="filterLocation" class="w-full p-2 border rounded"></select>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-left border">
+        <thead class="bg-gray-200">
+          <tr>
+            <th class="p-2 border">Donor</th>
+            <th class="p-2 border">Food Item</th>
+            <th class="p-2 border">Quantity</th>
+            <th class="p-2 border">Date</th>
+            <th class="p-2 border">Location</th>
+            <th class="p-2 border">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="donationList" class="bg-white">
+          <!-- Donation rows -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Chart -->
+    <canvas id="locationChart" class="my-6 w-full max-w-lg mx-auto"></canvas>
+  </div>
+
+  <script>
     const LOCATION_CAPACITY = 1000;
     const LOCATIONS = [
       "Pusat Transit Gelandangan Jalan Pahang",
@@ -40,109 +124,74 @@
     const locationChart = document.getElementById('locationChart');
 
     let donations = [];
-    let lastResetDate = localStorage.getItem('lastResetDate');
+    const dbRef = ref(db, 'donations');
 
-    function resetDonationsIfNewDay() {
-      const today = new Date().toISOString().split('T')[0]; // Get current date (YYYY-MM-DD)
-      if (lastResetDate !== today) {
-        donations = [];
-        localStorage.setItem('donations', JSON.stringify(donations));
-        localStorage.setItem('lastResetDate', today);
-        return true;
-      }
-      return false;
-    }
-
-    function saveDonationsToFirebase() {
-      LOCATIONS.forEach((loc) => {
-        const locationRef = ref(db, `location_stats/${loc}`);
-        get(locationRef).then(snapshot => {
-          let currentQuantity = snapshot.exists() ? snapshot.val().quantity : 0;
-          const totalQuantity = currentQuantity + donations.reduce((sum, d) => {
-            if (d.location === loc) {
-              return sum + parseInt(d.quantity);
-            }
-            return sum;
-          }, 0);
-
-          if (totalQuantity <= LOCATION_CAPACITY) {
-            const newDonationRef = ref(db, 'donations/' + Date.now());
-            set(newDonationRef, donations);
-          } else {
-            Swal.fire({
-              icon: 'error',
-              title: 'Full Capacity!',
-              text: 'This location cannot accept more donations.'
-            });
-          }
-        });
+    // Fetch donations from Firebase
+    function fetchDonations() {
+      onValue(dbRef, (snapshot) => {
+        donations = snapshot.val() || [];
+        renderDonations();
       });
     }
 
-    function updateDashboard() {
-      const locationStatsRef = ref(db, 'location_stats');
-      onValue(locationStatsRef, (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          // Update location stats dashboard
-          document.getElementById('totalDonations').textContent = data.length;
-          document.getElementById('totalQuantity').textContent = totalQuantity;
-          let statsList = document.getElementById('locationStats');
-          statsList.innerHTML = '';
-          for (const [loc, qty] of Object.entries(data)) {
-            const li = document.createElement('li');
-            li.textContent = `${loc}: ${qty} / ${LOCATION_CAPACITY}`;
-            statsList.appendChild(li);
-          }
-          drawChart(data);
-        }
+    function saveDonationToFirebase(donation) {
+      const newDonationRef = push(dbRef);
+      set(newDonationRef, donation);
+    }
+
+    function renderDonations() {
+      donationList.innerHTML = '';
+      const selectedLocation = filterLocation.value;
+      const filtered = selectedLocation === 'All' || !selectedLocation
+        ? donations
+        : donations.filter(d => d.location === selectedLocation);
+
+      filtered.forEach((d, i) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td class="p-2 border">${d.donor}</td>
+          <td class="p-2 border">${d.food}</td>
+          <td class="p-2 border">${d.quantity}</td>
+          <td class="p-2 border">${d.date}</td>
+          <td class="p-2 border">${d.location}</td>
+          <td class="p-2 border space-x-2">
+            <button onclick="editDonation(${i})" class="bg-yellow-500 text-white px-2 py-1 rounded">Edit</button>
+            <button onclick="deleteDonation(${i})" class="bg-red-600 text-white px-2 py-1 rounded">Delete</button>
+          </td>
+        `;
+        donationList.appendChild(row);
       });
     }
 
-    function drawChart(data) {
-      const labels = Object.keys(data);
-      const quantityData = Object.values(data).map((value) => value.quantity);
-      const ctx = locationChart.getContext('2d');
-      new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels,
-          datasets: [{
-            label: 'Quantity Donated',
-            data: quantityData,
-            backgroundColor: 'rgba(54, 162, 235, 0.7)',
-          }]
-        },
-        options: {
-          responsive: true,
-          scales: {
-            y: {
-              beginAtZero: true,
-              max: LOCATION_CAPACITY
-            }
-          }
-        }
-      });
+    function editDonation(index) {
+      const d = donations[index];
+      document.getElementById('donor').value = d.donor;
+      document.getElementById('food').value = d.food;
+      document.getElementById('quantity').value = d.quantity;
+      document.getElementById('date').value = d.date;
+      document.getElementById('location').value = d.location;
+      editIndexInput.value = index;
+    }
+
+    function deleteDonation(index) {
+      const donationRef = ref(db, 'donations/' + index);
+      remove(donationRef);
     }
 
     form.addEventListener('submit', function (e) {
       e.preventDefault();
 
-      const location = document.getElementById('location').value;
-      const quantity = parseInt(document.getElementById('quantity').value);
-      const locStats = getLocationStats();
-      const currentQty = 0;
-
       const newDonation = {
         donor: document.getElementById('donor').value,
         food: document.getElementById('food').value,
-        quantity,
+        quantity: parseInt(document.getElementById('quantity').value),
         date: document.getElementById('date').value,
-        location
+        location: document.getElementById('location').value
       };
 
+      // Save donation to Firebase
       saveDonationToFirebase(newDonation);
-      updateDashboard();
+      form.reset();
 
       Swal.fire({
         icon: 'success',
@@ -152,64 +201,9 @@
       });
     });
 
-    function getLocationStats() {
-      const stats = {};
-      LOCATIONS.forEach(loc => stats[loc] = 0);
-      donations.forEach(d => {
-        if (stats[d.location] !== undefined) {
-          stats[d.location] += parseInt(d.quantity);
-        }
-      });
-      return stats;
-    }
-
-    window.addEventListener('DOMContentLoaded', () => {
-      resetDonationsIfNewDay();
-      renderDonations();
-    });
+    // Initialize on page load
+    fetchDonations();
   </script>
-</head>
-<body class="bg-gray-100">
-
-  <div class="max-w-4xl mx-auto p-4 bg-white rounded-lg shadow-md">
-    <h1 class="text-3xl font-bold text-center mb-8">Food Donation Tracker</h1>
-
-    <!-- Donation Form -->
-    <form id="donationForm" class="space-y-4">
-      <div>
-        <label for="donor" class="block text-gray-700">Donor Name:</label>
-        <input type="text" id="donor" required class="w-full p-2 border rounded-md" />
-      </div>
-      <div>
-        <label for="food" class="block text-gray-700">Food Type:</label>
-        <input type="text" id="food" required class="w-full p-2 border rounded-md" />
-      </div>
-      <div>
-        <label for="quantity" class="block text-gray-700">Quantity (kg):</label>
-        <input type="number" id="quantity" required class="w-full p-2 border rounded-md" />
-      </div>
-      <div>
-        <label for="location" class="block text-gray-700">Location:</label>
-        <select id="location" class="w-full p-2 border rounded-md" required>
-          <option value="Pusat Transit Gelandangan Jalan Pahang">Pusat Transit Gelandangan Jalan Pahang</option>
-          <option value="Pusat Khidmat Gelandangan Medan Tuanku">Pusat Khidmat Gelandangan Medan Tuanku</option>
-          <option value="Pusat Pembelajaran Komuniti Jalan Chow Kit">Pusat Pembelajaran Komuniti Jalan Chow Kit</option>
-        </select>
-      </div>
-      <div>
-        <label for="date" class="block text-gray-700">Date:</label>
-        <input type="date" id="date" required class="w-full p-2 border rounded-md" />
-      </div>
-      <button type="submit" class="w-full p-2 bg-blue-500 text-white rounded-md">Add Donation</button>
-    </form>
-
-    <!-- Location Stats Dashboard -->
-    <h2 class="text-2xl mt-8 mb-4">Location Dashboard</h2>
-    <ul id="locationStats" class="space-y-2">
-      <!-- Location stats will be dynamically populated here -->
-    </ul>
-    <canvas id="locationChart" width="400" height="200"></canvas>
-  </div>
-
 </body>
+
 </html>
