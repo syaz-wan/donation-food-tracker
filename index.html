@@ -6,93 +6,10 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<body class="bg-gray-100 p-6">
-  <div class="max-w-6xl mx-auto bg-white p-6 rounded-xl shadow-md">
-    <h1 class="text-2xl font-bold mb-4 text-center">Food Donation Tracker</h1>
-
-    <!-- Dashboard -->
-    <div id="dashboard" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <div class="bg-blue-100 p-4 rounded shadow">
-        <p class="text-lg font-semibold">Total Donations</p>
-        <p id="totalDonations" class="text-2xl font-bold">0</p>
-      </div>
-      <div class="bg-green-100 p-4 rounded shadow">
-        <p class="text-lg font-semibold">Total Quantity</p>
-        <p id="totalQuantity" class="text-2xl font-bold">0</p>
-      </div>
-      <div class="bg-yellow-100 p-4 rounded shadow">
-        <p class="text-lg font-semibold">By Location</p>
-        <ul id="locationStats" class="list-disc ml-5 text-sm"></ul>
-      </div>
-    </div>
-
-    <!-- Form + Filter -->
-    <div class="mb-6 flex flex-col md:flex-row gap-6">
-      <form id="donationForm" class="space-y-4 w-full md:w-2/3">
-        <input type="hidden" id="editIndex" value="">
-        <div>
-          <label class="block font-semibold">Donor Name</label>
-          <input type="text" id="donor" required class="w-full p-2 border rounded">
-        </div>
-        <div>
-          <label class="block font-semibold">Food Item</label>
-          <input type="text" id="food" required class="w-full p-2 border rounded">
-        </div>
-        <div>
-          <label class="block font-semibold">Quantity</label>
-          <input type="number" id="quantity" required class="w-full p-2 border rounded">
-        </div>
-        <div>
-          <label class="block font-semibold">Date</label>
-          <input type="date" id="date" required class="w-full p-2 border rounded">
-        </div>
-        <div>
-          <label class="block font-semibold">Location</label>
-          <select id="location" required class="w-full p-2 border rounded"></select>
-        </div>
-        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-          Save Donation
-        </button>
-      </form>
-
-      <!-- Filter -->
-      <div class="w-full md:w-1/3">
-        <label class="block font-semibold mb-1">Filter by Location</label>
-        <select id="filterLocation" class="w-full p-2 border rounded"></select>
-      </div>
-    </div>
-
-    <!-- Table -->
-    <div class="overflow-x-auto">
-      <table class="w-full text-left border">
-        <thead class="bg-gray-200">
-          <tr>
-            <th class="p-2 border">Donor</th>
-            <th class="p-2 border">Food Item</th>
-            <th class="p-2 border">Quantity</th>
-            <th class="p-2 border">Date</th>
-            <th class="p-2 border">Location</th>
-            <th class="p-2 border">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="donationList" class="bg-white">
-          <!-- Donation rows -->
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Chart -->
-    <canvas id="locationChart" class="my-6 w-full max-w-lg mx-auto"></canvas>
-  </div>
-
-  <!-- Firebase SDK Script -->
   <script type="module">
-    // Import the functions you need from the SDKs you need
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getDatabase, ref, set, get, child, onValue } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
+    import { getDatabase, ref, set, get, onValue, update } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
-    // Your web app's Firebase configuration
     const firebaseConfig = {
       apiKey: "AIzaSyChHUYTqCCmCHJOCd73tim5gV9PCqTyQ2o",
       authDomain: "food-donation-tracker-4084e.firebaseapp.com",
@@ -103,11 +20,10 @@
       appId: "1:789282705882:web:ed4410ce766855989730e3"
     };
 
-    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // Locations for selection in the dropdown
+    const LOCATION_CAPACITY = 1000;
     const LOCATIONS = [
       "Pusat Transit Gelandangan Jalan Pahang",
       "Pusat Khidmat Gelandangan Medan Tuanku",
@@ -118,53 +34,113 @@
     const donationList = document.getElementById('donationList');
     const filterLocation = document.getElementById('filterLocation');
     const locationSelect = document.getElementById('location');
+    const editIndexInput = document.getElementById('editIndex');
+    const locationChart = document.getElementById('locationChart');
 
-    // Update location dropdown options
-    function updateLocationDropdowns() {
-      locationSelect.innerHTML = '<option value="" disabled selected>Select a location</option>';
-      filterLocation.innerHTML = '<option value="All">All</option>';
-      
-      LOCATIONS.forEach(loc => {
-        const opt1 = new Option(loc, loc);
-        locationSelect.add(opt1); // Adds to the donation form location dropdown
-        filterLocation.add(new Option(loc, loc)); // Adds to the filter location dropdown
+    let donations = [];
+    let lastResetDate = localStorage.getItem('lastResetDate');
+
+    function resetDonationsIfNewDay() {
+      const today = new Date().toISOString().split('T')[0]; // Get current date (YYYY-MM-DD)
+      if (lastResetDate !== today) {
+        donations = [];
+        localStorage.setItem('donations', JSON.stringify(donations));
+        localStorage.setItem('lastResetDate', today);
+        return true;
+      }
+      return false;
+    }
+
+    function saveDonationsToFirebase() {
+      LOCATIONS.forEach((loc) => {
+        const locationRef = ref(db, `location_stats/${loc}`);
+        get(locationRef).then(snapshot => {
+          let currentQuantity = snapshot.exists() ? snapshot.val().quantity : 0;
+          const totalQuantity = currentQuantity + donations.reduce((sum, d) => {
+            if (d.location === loc) {
+              return sum + parseInt(d.quantity);
+            }
+            return sum;
+          }, 0);
+
+          if (totalQuantity <= LOCATION_CAPACITY) {
+            const newDonationRef = ref(db, 'donations/' + Date.now());
+            set(newDonationRef, donations);
+          } else {
+            Swal.fire({
+              icon: 'error',
+              title: 'Full Capacity!',
+              text: 'This location cannot accept more donations.'
+            });
+          }
+        });
       });
     }
 
-    // Save donation data to Firebase
-    function saveDonationToFirebase(donation) {
-      const newDonationRef = ref(db, 'donations/' + Date.now());
-      set(newDonationRef, donation);
-    }
-
-    // Get donations from Firebase
-    function getDonationsFromFirebase() {
-      const donationsRef = ref(db, 'donations');
-      get(donationsRef).then((snapshot) => {
+    function updateDashboard() {
+      const locationStatsRef = ref(db, 'location_stats');
+      onValue(locationStatsRef, (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.val();
-          console.log(data);  // Handle the data
-        } else {
-          console.log("No data available");
+          // Update location stats dashboard
+          document.getElementById('totalDonations').textContent = data.length;
+          document.getElementById('totalQuantity').textContent = totalQuantity;
+          let statsList = document.getElementById('locationStats');
+          statsList.innerHTML = '';
+          for (const [loc, qty] of Object.entries(data)) {
+            const li = document.createElement('li');
+            li.textContent = `${loc}: ${qty} / ${LOCATION_CAPACITY}`;
+            statsList.appendChild(li);
+          }
+          drawChart(data);
         }
-      }).catch((error) => {
-        console.error(error);
       });
     }
 
-    // Form submit handler to save the donation
+    function drawChart(data) {
+      const labels = Object.keys(data);
+      const quantityData = Object.values(data).map((value) => value.quantity);
+      const ctx = locationChart.getContext('2d');
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Quantity Donated',
+            data: quantityData,
+            backgroundColor: 'rgba(54, 162, 235, 0.7)',
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: LOCATION_CAPACITY
+            }
+          }
+        }
+      });
+    }
+
     form.addEventListener('submit', function (e) {
       e.preventDefault();
-      const donation = {
+
+      const location = document.getElementById('location').value;
+      const quantity = parseInt(document.getElementById('quantity').value);
+      const locStats = getLocationStats();
+      const currentQty = 0;
+
+      const newDonation = {
         donor: document.getElementById('donor').value,
         food: document.getElementById('food').value,
-        quantity: parseInt(document.getElementById('quantity').value),
+        quantity,
         date: document.getElementById('date').value,
-        location: document.getElementById('location').value
+        location
       };
 
-      // Save to Firebase
-      saveDonationToFirebase(donation);
+      saveDonationToFirebase(newDonation);
+      updateDashboard();
 
       Swal.fire({
         icon: 'success',
@@ -172,41 +148,23 @@
         timer: 1500,
         showConfirmButton: false
       });
-
-      form.reset();
-      getDonationsFromFirebase();  // Refresh donations list
     });
 
-    // Fetch and render donations
-    function renderDonations(donations) {
-      donationList.innerHTML = '';
-      donations.forEach((d) => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td class="p-2 border">${d.donor}</td>
-          <td class="p-2 border">${d.food}</td>
-          <td class="p-2 border">${d.quantity}</td>
-          <td class="p-2 border">${d.date}</td>
-          <td class="p-2 border">${d.location}</td>
-          <td class="p-2 border">
-            <button class="bg-yellow-500 text-white px-2 py-1 rounded">Edit</button>
-            <button class="bg-red-600 text-white px-2 py-1 rounded">Delete</button>
-          </td>
-        `;
-        donationList.appendChild(row);
+    function getLocationStats() {
+      const stats = {};
+      LOCATIONS.forEach(loc => stats[loc] = 0);
+      donations.forEach(d => {
+        if (stats[d.location] !== undefined) {
+          stats[d.location] += parseInt(d.quantity);
+        }
       });
+      return stats;
     }
 
-    // Real-time listener to update donations
-    const donationsRef = ref(db, 'donations');
-    onValue(donationsRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        renderDonations(Object.values(data));
-      }
+    window.addEventListener('DOMContentLoaded', () => {
+      resetDonationsIfNewDay();
+      renderDonations();
     });
-
-    updateLocationDropdowns();
   </script>
 </body>
 </html>
